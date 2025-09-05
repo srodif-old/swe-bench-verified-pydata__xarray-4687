@@ -1922,6 +1922,33 @@ def test_where() -> None:
     assert_identical(expected, actual)
 
 
+def test_where_attrs() -> None:
+    # Test attribute preservation in xr.where
+    da = xr.DataArray([1, 2, 3], dims="x")
+    da.attrs["test_attr"] = "test_value"
+    
+    # Test keep_attrs=True preserves attributes from value arguments
+    result = xr.where(da > 1, da, 0, keep_attrs=True)
+    assert result.attrs == {"test_attr": "test_value"}
+    
+    # Test keep_attrs=False drops attributes  
+    result = xr.where(da > 1, da, 0, keep_attrs=False)
+    assert result.attrs == {}
+    
+    # Test that attributes come from value arguments, not condition
+    cond_with_attrs = xr.DataArray([True, False, True], dims="x")
+    cond_with_attrs.attrs["cond_attr"] = "should_be_ignored"
+    
+    result = xr.where(cond_with_attrs, da, 0, keep_attrs=True)
+    assert result.attrs == {"test_attr": "test_value"}
+    
+    # Test the original issue case
+    issue_da = xr.DataArray(1)
+    issue_da.attrs['foo'] = 'bar'
+    result = xr.where(issue_da == 0, -1, issue_da, keep_attrs=True)
+    assert result.attrs == {'foo': 'bar'}
+
+
 @pytest.mark.parametrize("use_dask", [True, False])
 @pytest.mark.parametrize("use_datetime", [True, False])
 def test_polyval(use_dask, use_datetime) -> None:

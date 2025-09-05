@@ -1727,7 +1727,7 @@ def dot(*arrays, dims=None, **kwargs):
     return result.transpose(*all_dims, missing_dims="ignore")
 
 
-def where(cond, x, y):
+def where(cond, x, y, keep_attrs=None):
     """Return elements from `x` or `y` depending on `cond`.
 
     Performs xarray-like broadcasting across input arguments.
@@ -1743,6 +1743,10 @@ def where(cond, x, y):
         values to choose from where `cond` is True
     y : scalar, array, Variable, DataArray or Dataset
         values to choose from where `cond` is False
+    keep_attrs : bool or str, optional
+        Whether to preserve attributes. If None (default), uses global 
+        setting. If True, always preserves attributes. If False, drops 
+        all attributes.
 
     Returns
     -------
@@ -1809,7 +1813,7 @@ def where(cond, x, y):
         equivalent methods
     """
     # alignment for three arguments is complicated, so don't support it yet
-    return apply_ufunc(
+    result = apply_ufunc(
         duck_array_ops.where,
         cond,
         x,
@@ -1817,7 +1821,27 @@ def where(cond, x, y):
         join="exact",
         dataset_join="exact",
         dask="allowed",
+        keep_attrs="drop",  # We'll handle attributes manually
     )
+    
+    # Handle attributes manually since the condition (first argument) typically
+    # doesn't have attributes, but we want to preserve them from x and y
+    if keep_attrs is None:
+        keep_attrs = _get_keep_attrs(default=True)
+    
+    if keep_attrs and keep_attrs != "drop" and hasattr(result, 'attrs'):
+        # Collect attributes from x and y (ignore cond attributes)
+        data_attrs = []
+        for arg in [x, y]:
+            if hasattr(arg, 'attrs') and arg.attrs:
+                data_attrs.append(arg.attrs)
+        
+        if data_attrs:
+            # Convert True to "override" for merge_attrs
+            combine_attrs = "override" if keep_attrs is True else keep_attrs
+            result.attrs = merge_attrs(data_attrs, combine_attrs=combine_attrs)
+    
+    return result
 
 
 def polyval(coord, coeffs, degree_dim="degree"):
